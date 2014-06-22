@@ -1,0 +1,126 @@
+---
+title: "PML project"
+author: "Pavel Krautsou"
+date: "Sunday, June 22, 2014"
+output: html_document
+---
+
+
+#My project for PML course
+I started my project by reading pml-training data
+``` {r}
+data <- read.table("pml-training.csv", sep = ",", header = TRUE)
+```
+Then I then deleted collums with too many missing observations 
+```{r}
+missing_obs <- colSums(is.na(data))
+too_manny_missing <- which(missing_obs > nrow(data)*0.1)
+data.new <- data[,-too_manny_missing]
+```
+
+Saved data in a different_file for further proccessing. This part is not highlighted as R code so I won't have to 
+correct the file in Notepad everytime i updata my R markdown file.
+
+write.table(data.new, "pml-training_new_0_1.csv", sep = ",")
+
+I changed all " " into "". I also change all "#DIV/0!" to "".  Then I read file back in R and changed ""'s into NA's
+```{r}
+data.na.rm <- read.table("pml-training_new_0_1.csv", sep = ",", header = TRUE)
+for (i in ncol(data.na.rm)){
+  for(j in nrow(data.na.rm)){
+		if(data.na.rm[j,i] == ""){
+			data.na.rm[j,i] = NA
+}}}
+```
+I then repeated the procedure of removing variables with too many NA's
+```{r}
+missing_obs <- colSums(is.na(data.na.rm))
+too_manny_missing <- which(missing_obs > nrow(data.na.rm)*0.1)
+data.na.rm <- data.na.rm[,-too_manny_missing]
+dim(data.na.rm)
+```
+
+I then removed X variable from dataset. It seems that it is connected with index and it's inclusion gave 100%
+accuracy on both training set and validation set. That made me think that it will  betray me on real test.
+
+```{r, echo = FALSE}
+plot(data.na.rm$X, col = data.na.rm$classe)
+```
+
+```{r}
+data.na.rm <- data.na.rm[,-1]
+```
+
+
+I also deleted cvtd_timestamp and new_window variables.
+cvtd_timestamp showed time of exercises and was coded as factor. Deleting spaces in text file made harder to 
+change it back into date format so I decided not to bother and just deleted the column.
+new_window had only one level "no" on test set. So I had to delete it to be able to predict on test set.
+
+```{r}
+data.na.rm <- data.na.rm[,c(-4,-5)]
+```
+
+For the purpose of validation I've split my set into training and validation data, using createDataPartition function from 
+caret package. I also set the seed to make my results reproducable
+
+``` {r, include = FALSE}
+library(caret)
+```
+``` {r}
+set.seed(62433)
+inTrain = createDataPartition(data.na.rm$classe, p = 3/4)[[1]]
+training = data.na.rm[ inTrain,]
+testing = data.na.rm[-inTrain,]
+```
+
+I then trained model my model using randomForest from randomForest package.
+It showed pretty good results on validation set. So I procceded with that model.
+``` {r, include = FALSE}
+library(randomForest)
+```
+``` {r}
+mod1 <- randomForest(classe~., data = training)
+pred <- predict(mod1,testing)
+sum(pred == testing$classe)/nrow(testing)
+```
+
+I then loaded test dataset. Some of classes in test data differed from training data.
+``` {r}
+factors_used <- names(training)[-57]
+test.data <- read.table("pml-testing.csv", sep = ",",
+ header = TRUE )
+test.data <- test.data[,factors_used]
+```
+
+Some of classes in test data differed from training data.
+``` {r}
+sum(sapply(training[,colnames(training)],class)=="integer")
+sum(sapply(training[,colnames(training)],class)=="factor")
+sum(sapply(training[,colnames(training)],class)=="numeric")
+sum(sapply(test.data[,colnames(test.data)],class)=="integer")
+sum(sapply(test.data[,colnames(test.data)],class)=="factor")
+sum(sapply(test.data[,colnames(test.data)],class)=="numeric")
+```
+
+Then I manually changed classes of some collums in test.data. To find them, I used this series of commands
+``` {r}
+train.class <- sapply(training[,colnames(training)],class)
+test.class <- sapply(test.data[,colnames(test.data)],class)
+which(train.class[-57] != test.class)
+```
+To change their classes I've used those commands
+``` {r}
+test.data$magnet_dumbbell_z <- as.numeric(test.data$magnet_dumbbell_z)
+test.data$magnet_forearm_y <- as.numeric(test.data$magnet_forearm_y)
+test.data$magnet_forearm_z <- as.numeric(test.data$magnet_forearm_z)
+```
+I then made my predictions on test dataset. When submiting I recived 20 out of 20
+``` {r}
+pred.test <- predict(mod1,test.data)
+pred.test
+```
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
